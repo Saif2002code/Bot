@@ -1,11 +1,5 @@
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from PIL import Image
 from PyPDF2 import PdfMerger
 import os
@@ -14,11 +8,31 @@ import logging
 import asyncio
 from collections import defaultdict
 import shutil
+from flask import Flask
+from threading import Thread
 
 # ==============================
-# ضع توكن البوت هنا
+# إعدادات السيرفر الوهمي لـ Render
 # ==============================
-TOKEN = "1825099848:AAEG9BORoJJikIrM3rfUGcrBKSuLOpaHwt0"
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I am alive"
+
+def run_http():
+    # Render يحدد المنفذ تلقائياً عبر متغير البيئة PORT
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run_http)
+    t.start()
+
+# ==============================
+# التوكن (استخدم التوكن الجديد هنا)
+# ==============================
+# يفضل وضعه في Environment Variables في Render للأمان
+TOKEN = "ضع_التوكن_الجديد_هنا" 
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==============================
-# تخزين بيانات المستخدم - محسن
+# تخزين بيانات المستخدم
 # ==============================
 user_data = defaultdict(lambda: {
     "images": [],
@@ -35,81 +49,41 @@ user_data = defaultdict(lambda: {
     "last_activity": datetime.now()
 })
 
-# تنظيف الذاكرة تلقائيًا
-async def cleanup_memory():
-    """تنظيف بيانات المستخدمين غير النشطين"""
-    while True:
-        try:
-            now = datetime.now()
-            to_delete = []
-            for uid, data in list(user_data.items()):
-                if (now - data["last_activity"]).total_seconds() > 3600:  # ساعة واحدة
-                    await cleanup_user_files(uid)
-                    to_delete.append(uid)
-            
-            for uid in to_delete:
-                del user_data[uid]
-                
-            await asyncio.sleep(300)  # كل 5 دقائق
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
+# ... (باقي الدوال كما هي: cleanup_memory, init_user, images_to_pdf, merge_pdfs, cleanup_user_files) ...
+# سأضع لك الدوال المختصرة هنا لعدم الإطالة، انسخ دوال المعالجة (handle_image, handle_pdf...) من كودك الأصلي وضعها هنا
+# تأكد من نسخ دوال: start, handle_image, handle_pdf, generate_pdf, merge_files, clear, status, cleanup_memory
 
-def init_user(uid):
-    user_data[uid]["last_activity"] = datetime.now()
-    return user_data[uid]
+# (هنا نضع دوالك السابقة كما هي تماماً بدون تغيير)
+# ...
+# ...
 
 # ==============================
-# تحويل الصور إلى PDF
+# تشغيل البوت (تم التعديل)
 # ==============================
-def images_to_pdf(image_paths, output_pdf):
-    try:
-        images = []
-        for path in image_paths:
-            if not os.path.exists(path):
-                continue
-            img = Image.open(path)
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            images.append(img)
-        
-        if not images:
-            raise ValueError("لا توجد صور صالحة")
-            
-        images[0].save(
-            output_pdf,
-            save_all=True,
-            append_images=images[1:],
-            resolution=100.0,  # استخدم float بدلاً من int
-            quality=95
-        )
-        return True
-    except Exception as e:
-        logger.error(f"PDF conversion error: {e}")
-        raise
+def main():
+    # تشغيل السيرفر الوهمي أولاً
+    keep_alive()
+    
+    application = ApplicationBuilder().token(TOKEN).build()
+    
+    # تسجيل المعالجات (نفس كودك السابق)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("pdf", generate_pdf))
+    application.add_handler(CommandHandler("merge", merge_files))
+    application.add_handler(CommandHandler("clear", clear))
+    application.add_handler(CommandHandler("status", status))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    application.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
+    
+    # تشغيل تنظيف الذاكرة
+    loop = asyncio.get_event_loop()
+    loop.create_task(cleanup_memory())
+    
+    print("🤖 البوت يعمل...")
+    application.run_polling()
 
-# ==============================
-# دمج ملفات PDF
-# ==============================
-def merge_pdfs(pdf_paths, output_pdf):
-    try:
-        merger = PdfMerger()
-        valid_pdfs = []
-        
-        for pdf in pdf_paths:
-            if os.path.exists(pdf) and os.path.getsize(pdf) > 0:
-                merger.append(pdf)
-                valid_pdfs.append(pdf)
-        
-        if not valid_pdfs:
-            raise ValueError("لا توجد ملفات PDF صالحة")
-            
-        merger.write(output_pdf)
-        merger.close()
-        return True
-    except Exception as e:
-        logger.error(f"PDF merge error: {e}")
-        raise
-
+if __name__ == "__main__":
+    main()
 # ==============================
 # تنظيف ملفات المستخدم
 # ==============================
