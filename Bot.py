@@ -32,7 +32,7 @@ def keep_alive():
 # التوكن (استخدم التوكن الجديد هنا)
 # ==============================
 # يفضل وضعه في Environment Variables في Render للأمان
-TOKEN = "ضع_التوكن_الجديد_هنا" 
+TOKEN = "1822362552:AAGVHEuOIxUPlvXy7ptp8ms3gB-q6hBBtJs" 
 
 logging.basicConfig(
     level=logging.INFO,
