@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محلل قنوات يوتيوب الذكي - الخطة المجانية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ytBlack: '#0a0a0a',
+                        ytDark: '#171717',
+                        ytYellow: '#fbbf24',
+                        ytRed: '#ef4444',
+                        ytBlue: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            font-family: 'Cairo', sans-serif;
+        }
+        body {
+            background-color: #000000;
+            background-image: radial-gradient(circle at 50% 0%, #1a1a1a 0%, #000000 70%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+        .glass {
+            background: rgba(23, 23, 23, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .gradient-yellow {
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            color: #000;
+        }
+        .gradient-red {
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+            color: #fff;
+        }
+        .gradient-blue {
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            color: #fff;
+        }
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .loader {
+            border: 4px solid #171717;
+            border-top: 4px solid #fbbf24;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(251, 191, 36, 0.3);
+            box-shadow: 0 10px 30px rgba(251, 191, 36, 0.1);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #fbbf24; border-radius: 10px; }
+        
+        /* Optimization for PDF Export to prevent crashing */
+        .pdf-exporting .glass {
+            backdrop-filter: none !important;
+            background: #171717 !important;
+            border: 1px solid #333 !important;
+            box-shadow: none !important;
+        }
+        
+        .score-circle {
+            position: relative;
+            width: 140px;
+            height: 140px;
+        }
+        .score-circle svg { transform: rotate(-90deg); }
+        .score-circle .score-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="glass sticky top-0 z-40 border-b border-neutral-800">
+        <div class="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
+                <div class="w-12 h-12 gradient-yellow rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                    <i class="fa-brands fa-youtube text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-wide">أناليتكس<span class="text-ytYellow">برو</span></h1>
+                    <p class="text-xs text-neutral-400 font-semibold">تحليل احترافي للقنوات</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <!-- Daily Limit Display -->
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
+                    <i class="fa-solid fa-bolt text-ytYellow"></i>
+                    <span class="text-sm text-neutral-300">الرصيد: <span id="limitDisplay" class="font-bold text-white">3/3</span></span>
+                </div>
+                
+                <button onclick="toggleAPIKey()" class="bg-neutral-800 hover:bg-neutral-700 px-4 py-2.5 rounded-xl text-sm transition flex items-center gap-2 border border-neutral-700">
+                    <i class="fa-solid fa-key text-ytRed"></i> مفتاح API
+                </button>
+                <button id="pdfBtn" onclick="exportPDF()" class="gradient-yellow px-5 py-2.5 rounded-xl text-sm font-bold hover:brightness-110 transition shadow-lg shadow-yellow-500/20 flex items-center gap-2 hidden">
+                    <i class="fa-solid fa-file-pdf"></i> تصدير التقرير
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Custom Message Modal -->
+    <div id="messageModal" class="fixed inset-0 z-[100] bg-black/90 hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="glass p-8 rounded-2xl max-w-sm w-full text-center border-t-4" id="messageModalBox">
+            <div id="messageIcon" class="text-5xl mb-4"></div>
+            <h3 id="messageTitle" class="text-2xl font-bold mb-2"></h3>
+            <p id="messageText" class="text-neutral-400 mb-6 text-sm leading-relaxed"></p>
+            <button onclick="closeMessage()" class="w-full py-3 rounded-xl font-bold transition" id="messageBtn"></button>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div id="apiKeyModal" class="fixed inset-0 z-50 bg-black/90 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="glass p-8 rounded-3xl max-w-lg w-full border border-neutral-800 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 gradient-red rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-key"></i>
+                </div>
+                <h3 class="text-2xl font-bold">إعداد مفتاح YouTube API</h3>
+            </div>
+            <p class="text-neutral-400 mb-6 text-sm leading-relaxed bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+                لتعمل الأداة بشكل مجاني تماماً، ستحتاج إلى مفتاح API من 
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-ytBlue hover:text-blue-400 underline font-semibold">جوجل كلاود</a>.
+                لا نقوم بتخزين المفتاح في أي سيرفر، يتم حفظه في متصفحك فقط.
+            </p>
+            <input type="text" id="apiKeyInput" placeholder="أدخل مفتاح API الخاص بك هنا (AIzaSy...)" class="w-full bg-black border border-neutral-700 rounded-xl px-4 py-3.5 mb-6 focus:border-ytYellow focus:ring-1 focus:ring-ytYellow outline-none transition text-left dir-ltr">
+            <div class="flex gap-3">
+                <button onclick="saveAPIKey()" class="gradient-yellow flex-1 py-3.5 rounded-xl font-bold hover:brightness-110 transition">حفظ الإعدادات</button>
+                <button onclick="toggleAPIKey()" class="bg-neutral-800 hover:bg-neutral-700 flex-1 py-3.5 rounded-xl font-bold transition">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-10 min-h-screen">
+        
+        <!-- Hero Section -->
+        <section id="heroSection" class="text-center py-12 md:py-20">
+            <div class="max-w-3xl mx-auto">
+                <div class="inline-block px-4 py-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-ytYellow text-sm font-bold mb-6">
+                    <i class="fa-solid fa-star mr-1"></i> الإصدار الاحترافي المجاني
+                </div>
+                <h2 class="text-4xl md:text-6xl font-black mb-6 leading-tight">
+                    حلل بيانات أي قناة يوتيوب <br>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-l from-ytYellow to-yellow-600">بضغطة زر واحدة</span>
+                </h2>
+                <p class="text-neutral-400 text-lg mb-10 max-w-xl mx-auto">
+                    احصل على تقارير تفصيلية، اكتشف نقاط الضعف، وحسّن أداء القناة من خلال تحليلات ذكية تعمل مباشرة من متصفحك.
+                </p>
+                
+                <!-- Search Box -->
+                <div class="glass p-3 rounded-3xl max-w-2xl mx-auto flex flex-col md:flex-row gap-3 border border-neutral-700/50 shadow-2xl">
+                    <div class="flex-1 flex items-center px-4 bg-black/50 rounded-2xl border border-neutral-800">
+                        <i class="fa-solid fa-search text-neutral-500 text-lg ml-3"></i>
+                        <input type="text" id="channelInput" placeholder="رابط القناة، أو المعرف (@channel)" class="w-full bg-transparent py-4 focus:outline-none text-white placeholder-neutral-600 font-medium text-lg">
+                    </div>
+                    <button onclick="startAnalysis()" class="gradient-yellow px-8 py-4 rounded-2xl font-black text-lg hover:brightness-110 transition shadow-lg whitespace-nowrap flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ التحليل
+                    </button>
+                </div>
+
+                <div class="mt-8 text-sm text-neutral-500 font-medium" id="remainingTextHome">
+                    لديك 3 محاولات تحليل مجانية اليوم
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Section -->
+        <section id="loadingSection" class="hidden py-32 text-center flex-col items-center justify-center">
+            <div class="loader mb-8 shadow-lg shadow-yellow-500/20"></div>
+            <h3 class="text-3xl font-black mb-3 text-ytYellow">الذكاء الاصطناعي يعمل...</h3>
+            <p class="text-neutral-400 font-medium text-lg" id="loadingText">جاري الاتصال بخوادم يوتيوب</p>
+            <div class="w-80 mx-auto mt-8 bg-neutral-900 rounded-full h-2.5 overflow-hidden border border-neutral-800">
+                <div id="progressBar" class="gradient-yellow h-full transition-all duration-300 relative" style="width: 0%">
+                    <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard Section (Target for PDF) -->
+        <section id="dashboardSection" class="hidden space-y-8 pb-20">
+            
+            <!-- Report Header (Visible mainly in PDF) -->
+            <div class="hidden print-header text-center pb-6 border-b border-neutral-800 mb-6">
+                <h1 class="text-3xl font-black text-ytYellow">تقرير تحليل القناة</h1>
+                <p class="text-neutral-400 mt-2" id="reportDate"></p>
+            </div>
+
+            <!-- Channel Profile -->
+            <div class="glass rounded-3xl p-8 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-ytYellow/10 rounded-full blur-3xl"></div>
+                
+                <div class="relative">
+                    <img id="channelAvatar" src="" alt="Avatar" class="w-32 h-32 rounded-full border-4 border-neutral-800 shadow-2xl object-cover">
+                    <div class="absolute -bottom-2 -right-2 bg-ytRed text-white text-xs font-bold px-3 py-1 rounded-full border-2 border-black">
+                        YouTube
+                    </div>
+                </div>
+                
+                <div class="flex-1 text-center md:text-right z-10">
+                    <h2 id="channelName" class="text-3xl font-black mb-2 text-white">اسم القناة</h2>
+                    <p id="channelHandle" class="text-ytYellow font-semibold mb-4 text-lg">@handle</p>
+                    <p id="channelDesc" class="text-neutral-400 text-sm leading-relaxed max-w-2xl bg-black/30 p-4 rounded-xl border border-neutral-800/50">وصف القناة</p>
+                </div>
+                
+                <div class="text-center bg-black/50 p-6 rounded-2xl border border-neutral-800 min-w-[160px] z-10">
+                    <div class="text-neutral-400 text-sm font-semibold mb-2">المشتركين</div>
+                    <div class="text-4xl font-black text-white" id="channelSubs">0</div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass stat-card rounded-2xl p-6 border-t-2 border-t-ytYellow">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-12 h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center text-ytYellow">
+                            <i class="fa-solid fa-users text-xl"></i>
+                        </div>
+                        <span class="bg-neutral-900 text-xs px-2 py-1 rounded text-neutral-400">إجمالي</span>
+                    </div>
+                    <div class="text-neutral-400 text-sm font-semibold mb-1">عدد المشتركين</div>
+                    <div id="subsStat" class="text-2xl font-black text-white">0</div>
+                </div>
+                
+                <div class="glass stat-card rounded-2xl p-6 border-t-2 border-t-ytRed">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center text-ytRed">
+                            <i class="fa-solid fa-eye text-xl"></i>
+                        </div>
+                        <span class="bg-neutral-900 text-xs px-2 py-1 rounded text-neutral-400">إجمالي</span>
+                    </div>
+                    <div class="text-neutral-400 text-sm font-semibold mb-1">المشاهدات الكلية</div>
+                    <div id="viewsStat" class="text-2xl font-black text-white">0</div>
+                </div>
+
+                <div class="glass stat-card rounded-2xl p-6 border-t-2 border-t-ytBlue">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-ytBlue">
+                            <i class="fa-solid fa-bolt text-xl"></i>
+                        </div>
+                        <span id="engagementBadge" class="text-xs px-2 py-1 rounded font-bold">تقييم</span>
+                    </div>
+                    <div class="text-neutral-400 text-sm font-semibold mb-1">معدل التفاعل</div>
+                    <div id="engagementStat" class="text-2xl font-black text-white">0%</div>
+                </div>
+
+                <div class="glass stat-card rounded-2xl p-6 border-t-2 border-t-neutral-500">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-12 h-12 bg-neutral-800 rounded-xl flex items-center justify-center text-white">
+                            <i class="fa-solid fa-video text-xl"></i>
+                        </div>
+                        <span class="bg-neutral-900 text-xs px-2 py-1 rounded text-neutral-400">إجمالي</span>
+                    </div>
+                    <div class="text-neutral-400 text-sm font-semibold mb-1">عدد الفيديوهات</div>
+                    <div id="videosStat" class="text-2xl font-black text-white">0</div>
+                </div>
+            </div>
+
+            <!-- Health Score Section -->
+            <div class="glass rounded-3xl p-8">
+                <div class="flex flex-col lg:flex-row items-center gap-10">
+                    <div class="text-center lg:w-1/3">
+                        <h3 class="text-xl font-bold mb-6 text-white">الصحة العامة للقناة</h3>
+                        <div class="score-circle mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                            <svg width="140" height="140">
+                                <circle cx="70" cy="70" r="60" stroke="#171717" stroke-width="14" fill="none"/>
+                                <circle id="scoreCircle" cx="70" cy="70" r="60" stroke="#fbbf24" stroke-width="14" fill="none" stroke-dasharray="377" stroke-dashoffset="377" stroke-linecap="round" class="transition-all duration-1000 ease-out"/>
+                            </svg>
+                            <div class="score-text">
+                                <div id="overallScore" class="text-4xl font-black text-white">0</div>
+                                <div class="text-sm font-bold text-ytYellow mt-1">من 100</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="bg-black/40 p-5 rounded-2xl border border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <i class="fa-solid fa-pen-nib text-ytYellow mb-2 text-xl"></i>
+                                <div class="text-neutral-400 text-sm font-semibold">قوة المحتوى والـ SEO</div>
+                            </div>
+                            <div id="contentScore" class="text-2xl font-black text-white">0</div>
+                        </div>
+                        <div class="bg-black/40 p-5 rounded-2xl border border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <i class="fa-solid fa-heart text-ytRed mb-2 text-xl"></i>
+                                <div class="text-neutral-400 text-sm font-semibold">مستوى تفاعل الجمهور</div>
+                            </div>
+                            <div id="engagementScoreData" class="text-2xl font-black text-white">0</div>
+                        </div>
+                        <div class="bg-black/40 p-5 rounded-2xl border border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <i class="fa-solid fa-calendar-check text-ytBlue mb-2 text-xl"></i>
+                                <div class="text-neutral-400 text-sm font-semibold">انتظام النشر</div>
+                            </div>
+                            <div id="consistencyScore" class="text-2xl font-black text-white">0</div>
+                        </div>
+                        <div class="bg-black/40 p-5 rounded-2xl border border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <i class="fa-solid fa-magnifying-glass text-white mb-2 text-xl"></i>
+                                <div class="text-neutral-400 text-sm font-semibold">تحسين العناوين</div>
+                            </div>
+                            <div id="seoScore" class="text-2xl font-black text-white">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass rounded-3xl p-6 border border-neutral-800">
+                    <h3 class="text-lg font-bold mb-6 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-simple text-ytYellow"></i> أداء المشاهدات (آخر 10 فيديوهات)
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass rounded-3xl p-6 border border-neutral-800">
+                    <h3 class="text-lg font-bold mb-6 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-ytRed"></i> توزيع تفاعل الجمهور
+                    </h3>
+                    <div class="h-64 relative flex items-center justify-center">
+                        <canvas id="engagementChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Insights -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Problems -->
+                <div class="glass rounded-3xl p-6 border-t-4 border-t-ytRed bg-gradient-to-b from-red-900/10 to-transparent">
+                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-triangle-exclamation text-ytRed text-sm"></i>
+                        </div>
+                        نقاط الضعف والمشاكل
+                    </h3>
+                    <div id="problemsList" class="space-y-3"></div>
+                </div>
+
+                <!-- Suggestions -->
+                <div class="glass rounded-3xl p-6 border-t-4 border-t-ytBlue bg-gradient-to-b from-blue-900/10 to-transparent">
+                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-lightbulb text-ytBlue text-sm"></i>
+                        </div>
+                        خطة التحسين المقترحة
+                    </h3>
+                    <div id="suggestionsList" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- Recent Videos Table -->
+            <div class="glass rounded-3xl p-6 overflow-hidden">
+                <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                    <i class="fa-solid fa-list-ul text-ytYellow"></i> تحليل آخر الفيديوهات
+                </h3>
+                <div class="overflow-x-auto pb-4">
+                    <table class="w-full text-sm text-right">
+                        <thead class="bg-black/50 text-neutral-400">
+                            <tr>
+                                <th class="py-4 px-4 rounded-r-xl font-semibold">الصورة والعنوان</th>
+                                <th class="py-4 px-4 font-semibold text-center">المشاهدات</th>
+                                <th class="py-4 px-4 font-semibold text-center">الإعجابات</th>
+                                <th class="py-4 px-4 font-semibold text-center">التعليقات</th>
+                                <th class="py-4 px-4 font-semibold text-center">نسبة التفاعل</th>
+                                <th class="py-4 px-4 rounded-l-xl font-semibold text-center">التاريخ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="videosTable" class="divide-y divide-neutral-800/50">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <footer class="border-t border-neutral-900 bg-black mt-auto">
+        <div class="container mx-auto px-4 py-8 text-center text-neutral-500 text-sm">
+            <div class="flex justify-center items-center gap-4 mb-4">
+                <i class="fa-brands fa-youtube text-2xl text-neutral-700 hover:text-ytRed transition cursor-pointer"></i>
+            </div>
+            <p class="font-semibold">أناليتكس برو © 2026 - أداة تحليل ذكية ومجانية</p>
+            <p class="mt-2 text-xs">تعمل البيانات محلياً على جهازك - نحترم خصوصيتك بالكامل</p>
+        </div>
+    </footer>
+
+    <script>
+        // Global Constants & State
+        const MAX_DAILY_LIMIT = 3;
+        let API_KEY = localStorage.getItem('youtube_api_key') || '';
+        let channelData = {};
+        let videosData = [];
+        let chartsInstance = {}; // To store and destroy previous charts
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            if (API_KEY) {
+                document.getElementById('apiKeyInput').value = API_KEY;
+            }
+            updateLimitDisplay();
+        });
+
+        // UI Helpers: Custom Modal System
+        function showMessage(title, text, type = 'info') {
+            const modal = document.getElementById('messageModal');
+            const box = document.getElementById('messageModalBox');
+            const icon = document.getElementById('messageIcon');
+            const btn = document.getElementById('messageBtn');
+
+            document.getElementById('messageTitle').textContent = title;
+            document.getElementById('messageText').textContent = text;
+            
+            // Reset styles
+            box.className = 'glass p-8 rounded-2xl max-w-sm w-full text-center border-t-4 shadow-2xl scale-95 transition-transform duration-300';
+            
+            if (type === 'error') {
+                box.classList.add('border-t-ytRed');
+                icon.innerHTML = '<i class="fa-solid fa-circle-xmark text-ytRed"></i>';
+                btn.className = 'w-full py-3 rounded-xl font-bold transition text-white bg-ytRed hover:bg-red-600';
+                btn.textContent = 'حسناً، فهمت';
+            } else if (type === 'success') {
+                box.classList.add('border-t-green-500');
+                icon.innerHTML = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+                btn.className = 'w-full py-3 rounded-xl font-bold transition text-black bg-green-500 hover:bg-green-600';
+                btn.textContent = 'استمرار';
+            } else if (type === 'warning') {
+                box.classList.add('border-t-ytYellow');
+                icon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-ytYellow"></i>';
+                btn.className = 'w-full py-3 rounded-xl font-bold transition text-black bg-ytYellow hover:bg-yellow-500';
+                btn.textContent = 'موافق';
+            } else {
+                box.classList.add('border-t-ytBlue');
+                icon.innerHTML = '<i class="fa-solid fa-circle-info text-ytBlue"></i>';
+                btn.className = 'w-full py-3 rounded-xl font-bold transition text-white bg-ytBlue hover:bg-blue-600';
+                btn.textContent = 'إغلاق';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => box.classList.remove('scale-95'), 10);
+        }
+
+        function closeMessage() {
+            const modal = document.getElementById('messageModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Settings Toggle
+        function toggleAPIKey() {
+            const modal = document.getElementById('apiKeyModal');
+            modal.classList.toggle('hidden');
+            modal.classList.toggle('flex');
+        }
+
+        function saveAPIKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (key) {
+                API_KEY = key;
+                localStorage.setItem('youtube_api_key', key);
+                toggleAPIKey();
+                showMessage('تم الحفظ', 'تم حفظ مفتاح API بنجاح في متصفحك.', 'success');
+            } else {
+                showMessage('خطأ في الإدخال', 'الرجاء إدخال مفتاح API صحيح لتتمكن من استخدام الأداة.', 'error');
+            }
+        }
+
+        // Daily Limit Logic
+        function getUsageData() {
+            const today = new Date().toDateString();
+            let data = JSON.parse(localStorage.getItem('yt_analyzer_usage') || '{}');
+            if (data.date !== today) {
+                data = { date: today, count: 0 };
+                localStorage.setItem('yt_analyzer_usage', JSON.stringify(data));
+            }
+            return data;
+        }
+
+        function checkLimit() {
+            const data = getUsageData();
+            return data.count < MAX_DAILY_LIMIT;
+        }
+
+        function incrementUsage() {
+            const data = getUsageData();
+            data.count++;
+            localStorage.setItem('yt_analyzer_usage', JSON.stringify(data));
+            updateLimitDisplay();
+        }
+
+        function updateLimitDisplay() {
+            const data = getUsageData();
+            const remaining = Math.max(0, MAX_DAILY_LIMIT - data.count);
+            
+            const limitDisplay = document.getElementById('limitDisplay');
+            if(limitDisplay) limitDisplay.textContent = `${remaining}/${MAX_DAILY_LIMIT}`;
+            
+            const remainingText = document.getElementById('remainingTextHome');
+            if(remainingText) {
+                if(remaining > 0) {
+                    remainingText.innerHTML = `لديك <span class="text-ytYellow font-bold">${remaining}</span> محاولات تحليل مجانية اليوم`;
+                } else {
+                    remainingText.innerHTML = `<span class="text-ytRed font-bold">نفدت محاولاتك اليوم. عد غداً للحصول على 3 محاولات جديدة!</span>`;
+                }
+            }
+        }
+
+        // Utilities
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('loadingText').textContent = text;
+        }
+
+        function extractChannelId(input) {
+            const patterns = [
+                /channel\/(UC[\w-]{22})/,
+                /@([\w.-]+)/,
+                /user\/([\w.-]+)/,
+                /^([a-zA-Z0-9_-]+)$/
+            ];
+            for (const pattern of patterns) {
+                const match = input.match(pattern);
+                if (match) return match[1];
+            }
+            return input.replace('@', ''); // Fallback for pure handles
+        }
+
+        // Main Execution
+        async function startAnalysis() {
+            const input = document.getElementById('channelInput').value.trim();
+            
+            if (!input) {
+                showMessage('تنبيه', 'الرجاء إدخال رابط القناة أو اسم المستخدم أولاً.', 'warning');
+                return;
+            }
+
+            if (!API_KEY) {
+                toggleAPIKey();
+                showMessage('مفتاح API مطلوب', 'الخطة المجانية تتطلب إدخال مفتاح YouTube API الخاص بك لتعمل.', 'warning');
+                return;
+            }
+
+            if (!checkLimit()) {
+                showMessage('تجاوز الحد اليومي', 'لقد استنفدت محاولاتك الثلاثة المجانية لهذا اليوم. يرجى العودة غداً للمزيد من التحليلات.', 'error');
+                return;
+            }
+
+            // UI Transition
+            document.getElementById('heroSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.add('hidden');
+            document.getElementById('pdfBtn').classList.add('hidden');
+            document.getElementById('loadingSection').classList.remove('hidden');
+            document.getElementById('loadingSection').classList.add('flex');
+
+            try {
+                updateProgress(20, 'جاري البحث عن القناة والتأكد من هويتها...');
+                const channelId = await searchChannel(input);
+                
+                updateProgress(45, 'جاري استخراج بيانات القناة والإحصائيات...');
+                channelData = await getChannelDetails(channelId);
+                
+                updateProgress(70, 'جاري تحليل آخر الفيديوهات والتفاعل...');
+                videosData = await getChannelVideos(channelId);
+                
+                updateProgress(90, 'جاري تشغيل خوارزميات الذكاء لتقييم الأداء...');
+                const analysis = analyzeData();
+                
+                updateProgress(100, 'اكتمل التحليل! جاري إعداد التقرير...');
+                
+                // Record successful usage
+                incrementUsage();
+
+                setTimeout(() => {
+                    displayResults(analysis);
+                    document.getElementById('loadingSection').classList.add('hidden');
+                    document.getElementById('loadingSection').classList.remove('flex');
+                    document.getElementById('dashboardSection').classList.remove('hidden');
+                    document.getElementById('pdfBtn').classList.remove('hidden');
+                    // Scroll to top of dashboard
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 800);
+
+            } catch (error) {
+                console.error(error);
+                showMessage('فشل التحليل', error.message, 'error');
+                document.getElementById('loadingSection').classList.add('hidden');
+                document.getElementById('loadingSection').classList.remove('flex');
+                document.getElementById('heroSection').classList.remove('hidden');
+            }
+        }
+
+        // API Calls
+        async function searchChannel(query) {
+            let channelId = extractChannelId(query);
+            if (channelId.startsWith('UC') && channelId.length === 24) return channelId;
+
+            const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(query)}&key=${API_KEY}`;
+            const response = await fetch(searchUrl);
+            const data = await response.json();
+
+            if (data.error) {
+                if(data.error.code === 403) throw new Error('مفتاح API غير صالح أو غير مفعل به خدمة YouTube Data API v3.');
+                throw new Error(data.error.message);
+            }
+
+            if (!data.items || data.items.length === 0) throw new Error('لم يتم العثور على أي قناة تطابق بحثك.');
+            return data.items[0].snippet.channelId;
+        }
+
+        async function getChannelDetails(channelId) {
+            const url = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&id=${channelId}&key=${API_KEY}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            if (!data.items || data.items.length === 0) throw new Error('لا يمكن الوصول لبيانات هذه القناة.');
+            return data.items[0];
+        }
+
+        async function getChannelVideos(channelId) {
+            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&order=date&maxResults=10&key=${API_KEY}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            if (!data.items || data.items.length === 0) return [];
+
+            const videoIds = data.items.map(item => item.id.videoId).join(',');
+            const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}&key=${API_KEY}`;
+            const statsResponse = await fetch(statsUrl);
+            const statsData = await statsResponse.json();
+            return statsData.items || [];
+        }
+
+        // Analysis Logic
+        function analyzeData() {
+            const stats = channelData.statistics;
+            const videos = videosData;
+
+            let totalLikes = 0;
+            let totalComments = 0;
+            let totalViews = 0;
+
+            videos.forEach(v => {
+                totalLikes += parseInt(v.statistics.likeCount || 0);
+                totalComments += parseInt(v.statistics.commentCount || 0);
+                totalViews += parseInt(v.statistics.viewCount || 0);
+            });
+
+            const engagementRate = totalViews > 0 ? ((totalLikes + totalComments) / totalViews) * 100 : 0;
+
+            const publishDates = videos.map(v => new Date(v.snippet.publishedAt)).sort((a, b) => b - a);
+            let avgDays = 30; // Default if not enough videos
+            if (publishDates.length > 1) {
+                let diff = 0;
+                for (let i = 0; i < publishDates.length - 1; i++) {
+                    diff += (publishDates[i] - publishDates[i+1]) / (1000 * 60 * 60 * 24);
+                }
+                avgDays = diff / (publishDates.length - 1);
+            }
+
+            let seoScore = 0;
+            let contentScore = 0;
+            
+            if(videos.length > 0) {
+                videos.forEach(v => {
+                    const t = v.snippet.title;
+                    const d = v.snippet.description;
+                    if (t.length >= 30 && t.length <= 70) seoScore += 40;
+                    if (t.split(' ').length >= 5) seoScore += 20;
+                    if (d.length >= 100) contentScore += 30;
+                    if (d.length >= 300) contentScore += 20;
+                    if (d.includes('http')) contentScore += 20; // contains links
+                });
+                seoScore = Math.min(100, Math.floor((seoScore / videos.length) * 1.5));
+                contentScore = Math.min(100, Math.floor((contentScore / videos.length) * 2) + 30); // baseline 30
+            }
+
+            const engagementScoreData = Math.min(100, Math.floor(engagementRate * 12));
+            const consistencyScore = Math.max(0, Math.min(100, Math.floor(100 - (avgDays * 3))));
+            
+            const overallScore = Math.floor((contentScore + engagementScoreData + consistencyScore + seoScore) / 4);
+
+            const problems = [];
+            const suggestions = [];
+
+            if (engagementRate < 3) {
+                problems.push("تفاعل الجمهور ضعيف مقارنة بعدد المشاهدات.");
+                suggestions.push("اطرح أسئلة مباشرة في الفيديو لزيادة التعليقات، وقم بتذكير المشاهدين بالاشتراك واللايك.");
+            } else if (engagementRate >= 6) {
+                suggestions.push("معدل التفاعل ممتاز! استمر في نفس أسلوبك في بناء المجتمع.");
+            }
+
+            if (avgDays > 10) {
+                problems.push("عدم انتظام النشر وفترات انقطاع طويلة (متوسط " + Math.floor(avgDays) + " يوم).");
+                suggestions.push("حاول بناء جدول نشر ثابت، يفضل فيديو واحد أسبوعياً على الأقل لزيادة اقتراحات يوتيوب.");
+            }
+
+            if (seoScore < 60) {
+                problems.push("عناوين الفيديوهات لا تتبع معايير السيو (طويلة جداً أو قصيرة جداً).");
+                suggestions.push("استخدم كلمات مفتاحية في بداية العنوان واجعله بين 40-70 حرف.");
+            }
+
+            if (contentScore < 60) {
+                problems.push("وصف الفيديوهات فقير ولا يحتوي على تفاصيل كافية.");
+                suggestions.push("اكتب وصفاً مفصلاً لا يقل عن 3 أسطر، وأضف روابط حساباتك وقوائم التشغيل في الوصف.");
+            }
+
+            if (videos.length === 0) {
+                problems.push("لم يتم العثور على فيديوهات حديثة لتحليلها.");
+            }
+
+            return {
+                stats, engagementRate, overallScore, contentScore, engagementScoreData, consistencyScore, seoScore, problems, suggestions, videos, totalLikes, totalComments
+            };
+        }
+
+        // Display Render
+        function displayResults(analysis) {
+            const { stats, videos } = analysis;
+
+            // Set Date
+            const dt = new Date();
+            document.getElementById('reportDate').textContent = "تاريخ التقرير: " + dt.toLocaleDateString('ar-EG') + " " + dt.toLocaleTimeString('ar-EG');
+
+            // Header Info
+            document.getElementById('channelAvatar').src = channelData.snippet.thumbnails.high?.url || channelData.snippet.thumbnails.default?.url;
+            document.getElementById('channelName').textContent = channelData.snippet.title;
+            document.getElementById('channelHandle').textContent = channelData.snippet.customUrl ? '@' + channelData.snippet.customUrl : 'قناة يوتيوب';
+            document.getElementById('channelDesc').textContent = channelData.snippet.description || 'لا يوجد وصف متاح للقناة.';
+            
+            // Stats Grid
+            document.getElementById('channelSubs').textContent = formatNumber(parseInt(stats.subscriberCount || 0));
+            document.getElementById('subsStat').textContent = formatNumber(parseInt(stats.subscriberCount || 0));
+            document.getElementById('viewsStat').textContent = formatNumber(parseInt(stats.viewCount || 0));
+            document.getElementById('videosStat').textContent = formatNumber(parseInt(stats.videoCount || 0));
+            document.getElementById('engagementStat').textContent = analysis.engagementRate.toFixed(2) + '%';
+            
+            const badge = document.getElementById('engagementBadge');
+            if (analysis.engagementRate >= 5) {
+                badge.textContent = 'ممتاز'; badge.className = 'text-xs px-2 py-1 rounded font-bold bg-green-500/20 text-green-400';
+            } else if (analysis.engagementRate >= 2.5) {
+                badge.textContent = 'جيد'; badge.className = 'text-xs px-2 py-1 rounded font-bold bg-blue-500/20 text-blue-400';
+            } else {
+                badge.textContent = 'ضعيف'; badge.className = 'text-xs px-2 py-1 rounded font-bold bg-red-500/20 text-red-400';
+            }
+
+            // Scores
+            document.getElementById('overallScore').textContent = analysis.overallScore;
+            document.getElementById('contentScore').textContent = analysis.contentScore + "%";
+            document.getElementById('engagementScoreData').textContent = analysis.engagementScoreData + "%";
+            document.getElementById('consistencyScore').textContent = analysis.consistencyScore + "%";
+            document.getElementById('seoScore').textContent = analysis.seoScore + "%";
+
+            // Circle Animation
+            setTimeout(() => {
+                const circle = document.getElementById('scoreCircle');
+                const offset = 377 - (analysis.overallScore / 100) * 377;
+                circle.style.strokeDashoffset = offset;
+                // Change color based on score
+                circle.style.stroke = analysis.overallScore >= 70 ? '#10b981' : analysis.overallScore >= 40 ? '#fbbf24' : '#ef4444';
+            }, 100);
+
+            // AI Lists
+            const pList = document.getElementById('problemsList');
+            if(analysis.problems.length === 0) {
+                pList.innerHTML = '<div class="text-neutral-400 text-sm">لا توجد مشاكل رئيسية، أداء القناة ممتاز.</div>';
+            } else {
+                pList.innerHTML = analysis.problems.map(p => `
+                    <div class="flex items-start gap-3 bg-black/40 p-3.5 rounded-xl border border-red-900/30">
+                        <i class="fa-solid fa-circle-exclamation text-ytRed mt-1"></i>
+                        <span class="text-neutral-300 text-sm leading-relaxed">${p}</span>
+                    </div>`).join('');
+            }
+
+            const sList = document.getElementById('suggestionsList');
+            if(analysis.suggestions.length === 0) {
+                sList.innerHTML = '<div class="text-neutral-400 text-sm">استمر على نفس النهج.</div>';
+            } else {
+                sList.innerHTML = analysis.suggestions.map(s => `
+                    <div class="flex items-start gap-3 bg-black/40 p-3.5 rounded-xl border border-blue-900/30">
+                        <i class="fa-solid fa-check text-ytBlue mt-1"></i>
+                        <span class="text-neutral-300 text-sm leading-relaxed">${s}</span>
+                    </div>`).join('');
+            }
+
+            // Table
+            const vTable = document.getElementById('videosTable');
+            vTable.innerHTML = videos.map(v => {
+                const views = parseInt(v.statistics.viewCount || 0);
+                const likes = parseInt(v.statistics.likeCount || 0);
+                const comments = parseInt(v.statistics.commentCount || 0);
+                const rate = views ? ((likes + comments)/views * 100).toFixed(1) : 0;
+                let rateColor = rate >= 5 ? 'text-green-500' : rate >= 2 ? 'text-ytBlue' : 'text-ytRed';
+
+                return `
+                    <tr class="hover:bg-neutral-800/30 transition border-b border-neutral-800/50 last:border-0">
+                        <td class="py-4 px-4">
+                            <div class="flex items-center gap-3">
+                                <img src="${v.snippet.thumbnails.default?.url}" class="w-20 h-14 object-cover rounded-lg border border-neutral-700 shadow-md">
+                                <div class="text-xs text-white text-right max-w-[200px] line-clamp-2 leading-relaxed" dir="auto">${v.snippet.title}</div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4 text-center font-semibold text-neutral-300">${formatNumber(views)}</td>
+                        <td class="py-4 px-4 text-center text-neutral-400">${formatNumber(likes)}</td>
+                        <td class="py-4 px-4 text-center text-neutral-400">${formatNumber(comments)}</td>
+                        <td class="py-4 px-4 text-center font-bold ${rateColor}">${rate}%</td>
+                        <td class="py-4 px-4 text-center text-neutral-500 text-xs">${formatDate(v.snippet.publishedAt)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            renderCharts(analysis);
+        }
+
+        // Charts Logic
+        function renderCharts(analysis) {
+            Chart.defaults.color = '#737373';
+            Chart.defaults.font.family = 'Cairo';
+
+            if(chartsInstance.perf) chartsInstance.perf.destroy();
+            if(chartsInstance.eng) chartsInstance.eng.destroy();
+
+            const vids = analysis.videos.slice(0,10).reverse();
+            const labels = vids.map((v, i) => `فيديو ${i+1}`);
+            const viewsData = vids.map(v => parseInt(v.statistics.viewCount || 0));
+
+            // View Performance Chart (Yellow theme)
+            const ctxPerf = document.getElementById('performanceChart').getContext('2d');
+            chartsInstance.perf = new Chart(ctxPerf, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'المشاهدات',
+                        data: viewsData,
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#000',
+                        pointBorderColor: '#fbbf24',
+                        pointBorderWidth: 2,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // Engagement Donut Chart (Red, Blue, Yellow)
+            const ctxEng = document.getElementById('engagementChart').getContext('2d');
+            chartsInstance.eng = new Chart(ctxEng, {
+                type: 'doughnut',
+                data: {
+                    labels: ['الإعجابات', 'التعليقات'],
+                    datasets: [{
+                        data: [analysis.totalLikes, analysis.totalComments],
+                        backgroundColor: ['#ef4444', '#3b82f6'],
+                        borderColor: '#171717',
+                        borderWidth: 4,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 20, color: '#e5e5e5' } }
+                    }
+                }
+            });
+        }
+
+        // Advanced PDF Export
+        async function exportPDF() {
+            const btn = document.getElementById('pdfBtn');
+            const originalHtml = btn.innerHTML;
+            
+            try {
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إعداد التقرير...';
+                btn.disabled = true;
+                btn.classList.add('opacity-70');
+
+                // 1. Prepare DOM for PDF (Remove complex CSS that crashes html2canvas)
+                document.body.classList.add('pdf-exporting');
+                const element = document.getElementById('dashboardSection');
+                
+                // Temporarily hide buttons/scrollbars if necessary inside the section
+                const channelName = document.getElementById('channelName').textContent || 'قناة';
+
+                // 2. Configure html2pdf options
+                const opt = {
+                    margin:       [10, 10, 10, 10], // top, left, bottom, right
+                    filename:     `تقرير_أناليتكس_${channelName}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.95 },
+                    html2canvas:  { 
+                        scale: 2, // good balance between quality and memory
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#0a0a0a' // match body bg
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+
+                // 3. Generate
+                await html2pdf().set(opt).from(element).save();
+
+                // 4. Restore
+                document.body.classList.remove('pdf-exporting');
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> تم التصدير';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70');
+                }, 2000);
+
+            } catch (error) {
+                console.error("PDF Error:", error);
+                document.body.classList.remove('pdf-exporting');
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
+                showMessage('خطأ في التصدير', 'حدث خطأ غير متوقع أثناء إنشاء ملف PDF، ربما بسبب نقص الذاكرة في المتصفح. حاول المحاولة مرة أخرى.', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
+
